@@ -1,4 +1,7 @@
 import { NextResponse } from "next/server";
+
+// Prevent Vercel from timing out this function if GPT is slow (Hobby allows max 60s)
+export const maxDuration = 60;
 import openai, { MODEL } from "@/lib/openai";
 
 const EXTRACTION_PROMPT = `You are an expert document processor specializing in invoices, rough bills, and receipts — including handwritten ones.
