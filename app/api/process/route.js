@@ -1,62 +1,47 @@
 import { NextResponse } from "next/server";
 import openai, { MODEL } from "@/lib/openai";
 
-const EXTRACTION_PROMPT = `You are an expert document processor specializing in invoices, bills, and receipts — including handwritten ones.
+const EXTRACTION_PROMPT = `You are an expert document processor specializing in invoices, rough bills, and receipts — including handwritten ones.
 
-Analyze the provided image carefully and extract ALL visible information into the following JSON structure. Be thorough — capture every line item, every number, every detail.
+Analyze the provided image carefully. Since rough bills and invoices do not all follow the same format, you must dynamically read whatever fields and column structures exist on the bill.
+
+Extract ALL visible information into the following dynamic JSON structure.
 
 {
-  "vendor_name": "Business/vendor name",
-  "vendor_address": "Full address if visible",
-  "vendor_phone": "Phone number if visible",
-  "vendor_email": "Email if visible",
-  "vendor_gst": "GST/Tax ID if visible",
-  "customer_name": "Customer/buyer name if visible",
-  "customer_address": "Customer address if visible",
-  "date": "Transaction date in YYYY-MM-DD format",
-  "invoice_number": "Invoice/bill number",
+  "core_fields": {
+    "vendor_name": "Main business/vendor/shop name",
+    "customer_name": "Customer/buyer name if visible",
+    "date": "Transaction date in YYYY-MM-DD format if found",
+    "invoice_number": "Invoice/bill record number if found",
+    "subtotal": 0.00,
+    "tax": 0.00,
+    "discount": 0.00,
+    "total": 0.00
+  },
+  "additional_fields": [
+    { "label": "Vehicle No", "value": "MH12AB1234" },
+    { "label": "Agent", "value": "Rahul" },
+    { "label": "Phone", "value": "9876543210" },
+    { "label": "Address", "value": "..." }
+    // ... Any other key-value pairs you find on the header or footer
+  ],
+  "items_headers": ["Column 1", "Column 2", "Column 3"], // e.g. ["Description", "Size", "Pieces", "Weight", "Rate", "Amount"]
   "items": [
-    {
-      "name": "Item description",
-      "quantity": 1,
-      "unit": "pcs/kg/ltr etc",
-      "price": 0.00,
-      "amount": 0.00
-    }
+    // Create objects where keys are the exact items_headers strings. 
+    // Example: { "Description": "Screws", "Pieces": 50, "Rate": 2.50, "Amount": 125.00 }
   ],
-  "subtotal": 0.00,
-  "discount": 0.00,
-  "tax_details": [
-    {
-      "type": "CGST/SGST/IGST/VAT/GST",
-      "rate": "percentage",
-      "amount": 0.00
-    }
-  ],
-  "tax": 0.00,
-  "total": 0.00,
-  "amount_in_words": "Total in words if visible",
-  "payment_method": "Cash/Card/UPI/Bank Transfer if visible",
-  "notes": "Any additional notes or terms",
+  "notes": "Any additional notes, amount in words, or terms",
   "confidence": {
-    "vendor_name": 0.95,
-    "date": 0.90,
-    "invoice_number": 0.85,
-    "items": 0.80,
-    "total": 0.90,
     "overall": 0.85
   }
 }
 
 Rules:
-1. Return ONLY valid JSON — no markdown, no explanation.
-2. For handwritten text, do your best to read it and note lower confidence.
-3. If a field is not visible, use null.
-4. Calculate subtotal/total if not explicitly shown but items are listed.
-5. Normalize currency to numbers (remove ₹, $, Rs. etc).
-6. Confidence scores: 0.0 (no idea) to 1.0 (perfectly clear).
-7. Parse dates to YYYY-MM-DD from any format.
-8. If multiple languages are present, extract in English where possible.`;
+1. Return ONLY valid JSON — no markdown.
+2. Ensure the dynamically created keys in the "items" array exactly match the string values in "items_headers".
+3. Use null for core_fields if not found. Do not invent data.
+4. Normalize currency to numbers (remove ₹, $, Rs., etc).
+5. For handwritten text, do your best to read it and mention lower overall confidence.`;
 
 export async function POST(request) {
   try {

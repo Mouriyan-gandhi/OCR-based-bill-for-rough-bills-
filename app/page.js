@@ -28,9 +28,9 @@ export default function HomePage() {
   const saveToHistory = (data) => {
     const entry = {
       id: Date.now(),
-      vendor: data.vendor_name || "Unknown",
-      total: data.total,
-      date: data.date || new Date().toISOString().split("T")[0],
+      vendor: data.core_fields?.vendor_name || "Unknown",
+      total: data.core_fields?.total,
+      date: data.core_fields?.date || new Date().toISOString().split("T")[0],
       timestamp: new Date().toISOString(),
     };
     const updated = [entry, ...history].slice(0, 50);
@@ -117,7 +117,7 @@ export default function HomePage() {
     // Dynamic import for client-side only
     const { generateInvoicePDF } = await import("@/lib/generatePDF");
     const doc = generateInvoicePDF(result);
-    doc.save(`invoice-${result.invoice_number || Date.now()}.pdf`);
+    doc.save(`invoice-${result.core_fields?.invoice_number || Date.now()}.pdf`);
   };
 
   const downloadJSON = () => {
@@ -126,7 +126,7 @@ export default function HomePage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `invoice-${result.invoice_number || Date.now()}.json`;
+    a.download = `invoice-${result.core_fields?.invoice_number || Date.now()}.json`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -308,56 +308,39 @@ export default function HomePage() {
               <div className="field-grid">
                 <div className="field-item">
                   <span className="field-label">Vendor Name</span>
-                  <span className={`field-value ${!result.vendor_name ? "null" : ""}`}>
-                    {result.vendor_name || "Not detected"}
+                  <span className={`field-value ${!result.core_fields?.vendor_name ? "null" : ""}`}>
+                    {result.core_fields?.vendor_name || "Not detected"}
+                  </span>
+                </div>
+                <div className="field-item">
+                  <span className="field-label">Customer Name</span>
+                  <span className={`field-value ${!result.core_fields?.customer_name ? "null" : ""}`}>
+                    {result.core_fields?.customer_name || "Not detected"}
                   </span>
                 </div>
                 <div className="field-item">
                   <span className="field-label">Invoice Number</span>
-                  <span className={`field-value ${!result.invoice_number ? "null" : ""}`}>
-                    {result.invoice_number || "Not detected"}
+                  <span className={`field-value ${!result.core_fields?.invoice_number ? "null" : ""}`}>
+                    {result.core_fields?.invoice_number || "Not detected"}
                   </span>
                 </div>
                 <div className="field-item">
                   <span className="field-label">Date</span>
-                  <span className={`field-value ${!result.date ? "null" : ""}`}>
-                    {result.date || "Not detected"}
+                  <span className={`field-value ${!result.core_fields?.date ? "null" : ""}`}>
+                    {result.core_fields?.date || "Not detected"}
                   </span>
                 </div>
-                <div className="field-item">
-                  <span className="field-label">Payment Method</span>
-                  <span className={`field-value ${!result.payment_method ? "null" : ""}`}>
-                    {result.payment_method || "Not detected"}
-                  </span>
-                </div>
-                {result.vendor_address && (
-                  <div className="field-item">
-                    <span className="field-label">Vendor Address</span>
-                    <span className="field-value">{result.vendor_address}</span>
+                {/* Dynamically render all additional text fields found */}
+                {result.additional_fields && result.additional_fields.length > 0 && result.additional_fields.map((field, idx) => (
+                  <div className="field-item" key={idx}>
+                    <span className="field-label">{field.label}</span>
+                    <span className="field-value">{field.value}</span>
                   </div>
-                )}
-                {result.vendor_phone && (
-                  <div className="field-item">
-                    <span className="field-label">Phone</span>
-                    <span className="field-value">{result.vendor_phone}</span>
-                  </div>
-                )}
-                {result.vendor_gst && (
-                  <div className="field-item">
-                    <span className="field-label">GST Number</span>
-                    <span className="field-value">{result.vendor_gst}</span>
-                  </div>
-                )}
-                {result.customer_name && (
-                  <div className="field-item">
-                    <span className="field-label">Customer</span>
-                    <span className="field-value">{result.customer_name}</span>
-                  </div>
-                )}
+                ))}
               </div>
 
               {/* Items Table */}
-              {result.items && result.items.length > 0 && (
+              {result.items && result.items.length > 0 && result.items_headers && (
                 <>
                   <div className="card-header" style={{ marginTop: 24 }}>
                     <span>📦</span>
@@ -368,26 +351,24 @@ export default function HomePage() {
                       <thead>
                         <tr>
                           <th>#</th>
-                          <th>Description</th>
-                          <th>Qty</th>
-                          <th>Price</th>
-                          <th>Amount</th>
+                          {result.items_headers.map((header, i) => (
+                            <th key={i}>{header}</th>
+                          ))}
                         </tr>
                       </thead>
                       <tbody>
                         {result.items.map((item, i) => (
                           <tr key={i}>
                             <td>{i + 1}</td>
-                            <td>{item.name || "—"}</td>
-                            <td>{item.quantity ?? "—"}</td>
-                            <td>{formatCurrency(item.price)}</td>
-                            <td>
-                              {formatCurrency(
-                                item.amount || (item.quantity && item.price
-                                  ? item.quantity * item.price
-                                  : null)
-                              )}
-                            </td>
+                            {result.items_headers.map((header, j) => {
+                              const val = item[header];
+                              const isNumber = typeof val === 'number' || (typeof val === 'string' && !isNaN(parseFloat(val)) && val.trim() !== '' && /amount|price|rate|total|value/i.test(header));
+                              return (
+                                <td key={j}>
+                                  {isNumber ? formatCurrency(val) : (val || "—")}
+                                </td>
+                              );
+                            })}
                           </tr>
                         ))}
                       </tbody>
@@ -400,36 +381,25 @@ export default function HomePage() {
               <div style={{ marginTop: 20 }}>
                 <div className="totals-row">
                   <span className="label">Subtotal</span>
-                  <span className="value">{formatCurrency(result.subtotal)}</span>
+                  <span className="value">{formatCurrency(result.core_fields?.subtotal)}</span>
                 </div>
-                {result.discount && (
+                {result.core_fields?.discount ? (
                   <div className="totals-row">
                     <span className="label">Discount</span>
                     <span className="value" style={{ color: "#f87171" }}>
-                      -{formatCurrency(result.discount)}
+                      -{formatCurrency(result.core_fields?.discount)}
                     </span>
                   </div>
-                )}
-                {result.tax_details && result.tax_details.length > 0 ? (
-                  result.tax_details.map((tax, i) => (
-                    tax && tax.type ? (
-                      <div className="totals-row" key={i}>
-                        <span className="label">
-                          {tax.type} {tax.rate ? `(${tax.rate}%)` : ""}
-                        </span>
-                        <span className="value">{formatCurrency(tax.amount)}</span>
-                      </div>
-                    ) : null
-                  ))
-                ) : result.tax ? (
+                ) : null}
+                {result.core_fields?.tax ? (
                   <div className="totals-row">
                     <span className="label">Tax</span>
-                    <span className="value">{formatCurrency(result.tax)}</span>
+                    <span className="value">{formatCurrency(result.core_fields?.tax)}</span>
                   </div>
                 ) : null}
                 <div className="totals-row grand-total">
                   <span className="label">Total</span>
-                  <span className="value">{formatCurrency(result.total)}</span>
+                  <span className="value">{formatCurrency(result.core_fields?.total)}</span>
                 </div>
               </div>
             </div>
